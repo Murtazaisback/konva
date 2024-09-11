@@ -1,6 +1,6 @@
 
 import './App.css';
-import DrawingCanvas from './components/drawing';
+// import DrawingCanvas from './components/drawing';
 import { Paint } from './components/Paint';
 import { PaintDemo } from './components/PaintDemo';
 import { ChakraProvider } from "@chakra-ui/react";

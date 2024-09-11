@@ -23,19 +23,36 @@ import {
   PopoverCloseButton,
   PopoverContent,
   PopoverTrigger,
+  PopoverBody,
+  Radio,
+  RadioGroup,
+  Stack,
 } from "@chakra-ui/react";
 import { Download, Upload, XLg } from "react-bootstrap-icons";
 
-const SIZE = 550;
+const SIZE = 850;
+const SIZE2 = 550;
 const DEFAULT_BACKGROUND_COLOR = "#fff";
 
-const downloadURI = (uri, name) => {
-  const link = document.createElement("a");
-  link.download = name;
-  link.href = uri || "";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+const downloadFile = (data, fileName, fileType) => {
+  const blob = new Blob([data], { type: fileType });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = fileName;
+  a.click();
+};
+const readUploadedFileAsText = (inputFile) => {
+  const reader = new FileReader();
+  return new Promise((resolve, reject) => {
+    reader.onerror = () => {
+      reader.abort();
+      reject(new DOMException("Problem parsing input file."));
+    };
+    reader.onload = () => {
+      resolve(reader.result);
+    };
+    reader.readAsText(inputFile);
+  });
 };
 
 export const PaintDemo = React.memo(function Paint() {
@@ -49,14 +66,46 @@ export const PaintDemo = React.memo(function Paint() {
   const [circles, setCircles] = useState([]);
   const [arrows, setArrows] = useState([]);
   const [image, setImage] = useState();
-
   const [color, setColor] = useState("#000");
-
   const [backgroundColor, setBackgroundColor] = useState(
     DEFAULT_BACKGROUND_COLOR
-  ); // Initial background color state
+  );
   const [drawAction, setDrawAction] = useState(DrawAction.Scribble);
-  const [isBgColorMode, setIsBgColorMode] = useState(false); // Toggle background color mode
+  const [isBgColorMode, setIsBgColorMode] = useState(false);
+
+  // New state for the selected file format
+  const [fileFormat, setFileFormat] = useState("image/png");
+
+
+
+  const saveCanvasState = useCallback(() => {
+    const canvasState = {
+      backgroundColor,
+      rectangles,
+      circles,
+      scribbles,
+      arrows,
+    };
+    const jsonData = JSON.stringify(canvasState);
+    downloadFile(jsonData, "canvas-state.json", "application/json");
+  }, [backgroundColor, rectangles, circles, scribbles, arrows]);
+
+  const loadCanvasState = useCallback(async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const fileContent = await readUploadedFileAsText(file);
+      const canvasState = JSON.parse(fileContent);
+
+      setBackgroundColor(canvasState.backgroundColor || DEFAULT_BACKGROUND_COLOR);
+      setRectangles(canvasState.rectangles || []);
+      setCircles(canvasState.circles || []);
+      setScribbles(canvasState.scribbles || []);
+      setArrows(canvasState.arrows || []);
+    }
+  }, []);
+
+  const fileRef = useRef(null);
+
 
   const checkDeselect = useCallback((e) => {
     const clickedOnEmpty = e.target === stageRef?.current?.find("#bg")?.[0];
@@ -215,6 +264,7 @@ export const PaintDemo = React.memo(function Paint() {
 
   const isDraggable = drawAction === DrawAction.Select;
 
+
   const onImportImageSelect = useCallback(
     (e) => {
       if (e.target.files?.[0]) {
@@ -228,16 +278,27 @@ export const PaintDemo = React.memo(function Paint() {
     []
   );
 
-  const fileRef = useRef(null);
 
   const onImportImageClick = useCallback(() => {
     fileRef?.current && fileRef?.current?.click();
   }, []);
 
   const onExportClick = useCallback(() => {
-    const dataURL = stageRef?.current?.toDataURL({ pixelRatio: 3 });
-    downloadURI(dataURL, "image.png");
-  }, []);
+    const mimeType = fileFormat; // Use the selected file format (e.g., 'image/png', 'image/jpeg')
+    const dataURL = stageRef?.current?.toDataURL({
+      mimeType, // Correct format
+      pixelRatio: 3, // Optional: Increase this to improve image quality
+    });
+  
+    const link = document.createElement("a");
+    link.href = dataURL;
+  
+    // Extract file extension from the selected file format and use it in the filename
+    const extension = mimeType.split("/")[1];
+    link.download = `canvas.${extension}`;
+  
+    link.click();
+  }, [fileFormat]);
 
   const onClear = useCallback(() => {
     setRectangles([]);
@@ -246,6 +307,7 @@ export const PaintDemo = React.memo(function Paint() {
     setScribbles([]);
     setImage(undefined);
   }, []);
+
 
    const toggleBackgroundColorMode = () => {
     if (isBgColorMode) {
@@ -258,6 +320,9 @@ export const PaintDemo = React.memo(function Paint() {
     setBackgroundColor(color.hex); // Update background color when color picker is used
   };
   const diagramRef = useRef(null);
+
+
+  
 
   return (
     <Box m={4}>
@@ -302,9 +367,48 @@ export const PaintDemo = React.memo(function Paint() {
         />
       </ButtonGroup>
       <ButtonGroup>
-        <IconButton onClick={onExportClick} aria-label="Export" >
-          <Download size={14} />
-        </IconButton>
+      <Button onClick={saveCanvasState} colorScheme="blue">
+            Save Canvas
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            style={{ display: "none" }}
+            onChange={loadCanvasState}
+          />
+          <Button onClick={onImportImageClick} colorScheme="green">
+            Load Canvas
+          </Button>
+          <Popover>
+  <PopoverTrigger>
+    <IconButton
+      aria-label="Export"
+      icon={<Download />}
+      colorScheme="blue"
+    />
+  </PopoverTrigger>
+  <PopoverContent>
+    <PopoverArrow />
+    <PopoverCloseButton />
+    <PopoverBody>
+      <RadioGroup onChange={setFileFormat} value={fileFormat}>
+        <Stack>
+          <Radio value="image/png">PNG</Radio>
+          <Radio value="image/jpeg">JPEG</Radio>
+          <Radio value="image/jpg">JPG</Radio>
+        </Stack>
+      </RadioGroup>
+      <Button
+        mt={2}
+        onClick={onExportClick}
+        colorScheme="blue"
+        width="100%"
+      >
+        Download
+      </Button>
+    </PopoverBody>
+  </PopoverContent>
+</Popover>
         <IconButton onClick={onClear} aria-label="Clear canvas">
           <XLg size={14} />
         </IconButton>
@@ -342,7 +446,7 @@ export const PaintDemo = React.memo(function Paint() {
       bg={backgroundColor} // Set background color
     >
       <Stage
-        height={SIZE}
+        height={SIZE2}
         width={SIZE}
         ref={stageRef}
         onMouseUp={onStageMouseUp}
