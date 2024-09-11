@@ -1,18 +1,10 @@
 .main{
   /* max-width: 80vh; */
-  border: 1px solid black;
+  /* border: 1px solid black; */
   width: fit-content;
   margin: auto;
   /* margin-top: 20px; */
   border-radius: 20px;
   overflow: hidden;
   padding: 5px;
-}
-.main_container{
-  background: black;
-  width: 100%;
-  height: 100vh;
-  margin-top: 0;
-  background-image: url("https://satble-my-c-varo.vercel.app/static/media/Bg-3-12.e6d1d74fa2f244df6b75.webp");
-  background-color: #a9bac8a3;
 }
