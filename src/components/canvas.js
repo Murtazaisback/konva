@@ -10,7 +10,7 @@ import {
   Transformer,
 } from "react-konva";
 import { v4 as uuidv4 } from "uuid";
-import { DrawAction, PAINT_OPTIONS } from "./Paint.constants";
+import { DrawAction, PAINT_OPTIONS } from "./canvas.constants";
 import { SketchPicker } from "react-color";
 import {
   Box,
@@ -34,6 +34,9 @@ const SIZE = 850;
 const SIZE2 = 550;
 const DEFAULT_BACKGROUND_COLOR = "#fff";
 
+
+
+//donwload image/canvas format
 const downloadFile = (data, fileName, fileType) => {
   const blob = new Blob([data], { type: fileType });
   const a = document.createElement("a");
@@ -41,6 +44,12 @@ const downloadFile = (data, fileName, fileType) => {
   a.download = fileName;
   a.click();
 };
+
+
+
+
+
+//opeing png/jpg/ format file in the canvas
 const readUploadedFileAsText = (inputFile) => {
   const reader = new FileReader();
   return new Promise((resolve, reject) => {
@@ -56,57 +65,27 @@ const readUploadedFileAsText = (inputFile) => {
 };
 
 export const PaintDemo = React.memo(function Paint() {
+
+  //hookes
   const currentShapeRef = useRef();
   const isPaintRef = useRef(false);
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
-
   const [scribbles, setScribbles] = useState([]);
   const [rectangles, setRectangles] = useState([]);
   const [circles, setCircles] = useState([]);
   const [arrows, setArrows] = useState([]);
   const [image, setImage] = useState();
   const [color, setColor] = useState("#000");
-  const [backgroundColor, setBackgroundColor] = useState(
-    DEFAULT_BACKGROUND_COLOR
-  );
+  const [backgroundColor, setBackgroundColor] = useState(DEFAULT_BACKGROUND_COLOR);
   const [drawAction, setDrawAction] = useState(DrawAction.Scribble);
   const [isBgColorMode, setIsBgColorMode] = useState(false);
-
-  // New state for the selected file format
   const [fileFormat, setFileFormat] = useState("image/png");
 
 
 
-  const saveCanvasState = useCallback(() => {
-    const canvasState = {
-      backgroundColor,
-      rectangles,
-      circles,
-      scribbles,
-      arrows,
-    };
-    const jsonData = JSON.stringify(canvasState);
-    downloadFile(jsonData, "canvas-state.json", "application/json");
-  }, [backgroundColor, rectangles, circles, scribbles, arrows]);
 
-  const loadCanvasState = useCallback(async (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const fileContent = await readUploadedFileAsText(file);
-      const canvasState = JSON.parse(fileContent);
-
-      setBackgroundColor(canvasState.backgroundColor || DEFAULT_BACKGROUND_COLOR);
-      setRectangles(canvasState.rectangles || []);
-      setCircles(canvasState.circles || []);
-      setScribbles(canvasState.scribbles || []);
-      setArrows(canvasState.arrows || []);
-    }
-  }, []);
-
-  const fileRef = useRef(null);
-
-
+//able to select/deselect
   const checkDeselect = useCallback((e) => {
     const clickedOnEmpty = e.target === stageRef?.current?.find("#bg")?.[0];
     if (clickedOnEmpty) {
@@ -114,10 +93,11 @@ export const PaintDemo = React.memo(function Paint() {
     }
   }, []);
 
+
+//positioning the shapes by pointer
   const onStageMouseUp = useCallback(() => {
     isPaintRef.current = false;
   }, []);
-
   const onStageMouseDown = useCallback(
     (e) => {
       checkDeselect(e);
@@ -185,7 +165,7 @@ export const PaintDemo = React.memo(function Paint() {
     },
     [checkDeselect, drawAction, color]
   );
-
+  //positioning the shapes by pointer
   const onStageMouseMove = useCallback(() => {
     if (drawAction === DrawAction.Select || !isPaintRef.current) return;
 
@@ -253,6 +233,8 @@ export const PaintDemo = React.memo(function Paint() {
     }
   }, [drawAction]);
 
+
+  //shape clickers
   const onShapeClick = useCallback(
     (e) => {
       if (drawAction !== DrawAction.Select) return;
@@ -265,6 +247,10 @@ export const PaintDemo = React.memo(function Paint() {
   const isDraggable = drawAction === DrawAction.Select;
 
 
+  
+  
+  
+  // import png format file
   const onImportImageSelect = useCallback(
     (e) => {
       if (e.target.files?.[0]) {
@@ -277,12 +263,14 @@ export const PaintDemo = React.memo(function Paint() {
     },
     []
   );
-
-
+    // import png format file
   const onImportImageClick = useCallback(() => {
     fileRef?.current && fileRef?.current?.click();
   }, []);
 
+
+
+  //download image as png/jpg/jpeg
   const onExportClick = useCallback(() => {
     const mimeType = fileFormat; // Use the selected file format (e.g., 'image/png', 'image/jpeg')
     const dataURL = stageRef?.current?.toDataURL({
@@ -300,6 +288,9 @@ export const PaintDemo = React.memo(function Paint() {
     link.click();
   }, [fileFormat]);
 
+
+
+  //clear the whole canvas
   const onClear = useCallback(() => {
     setRectangles([]);
     setCircles([]);
@@ -309,6 +300,10 @@ export const PaintDemo = React.memo(function Paint() {
   }, []);
 
 
+
+
+
+  //canvas background colors function
    const toggleBackgroundColorMode = () => {
     if (isBgColorMode) {
       // If background color mode is already on, reset the background color to white
@@ -321,6 +316,38 @@ export const PaintDemo = React.memo(function Paint() {
   };
   const diagramRef = useRef(null);
 
+
+  //saving canavs as json
+  const saveCanvasState = useCallback(() => {
+    const canvasState = {
+      backgroundColor,
+      rectangles,
+      circles,
+      scribbles,
+      arrows,
+    };
+    const jsonData = JSON.stringify(canvasState);
+    downloadFile(jsonData, "canvas-state.json", "application/json");
+  }, [backgroundColor, rectangles, circles, scribbles, arrows]);
+
+
+
+  //loading canvas as json
+  const loadCanvasState = useCallback(async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const fileContent = await readUploadedFileAsText(file);
+      const canvasState = JSON.parse(fileContent);
+
+      setBackgroundColor(canvasState.backgroundColor || DEFAULT_BACKGROUND_COLOR);
+      setRectangles(canvasState.rectangles || []);
+      setCircles(canvasState.circles || []);
+      setScribbles(canvasState.scribbles || []);
+      setArrows(canvasState.arrows || []);
+    }
+  }, []);
+
+  const fileRef = useRef(null);
 
   
 
