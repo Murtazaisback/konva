@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useRef, useState,useEffect } from "react";
 import {
   Stage,
   Layer,
@@ -12,6 +12,7 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { DrawAction, PAINT_OPTIONS } from "./canvas.constants";
 import { SketchPicker } from "react-color";
+import { FiMenu } from "react-icons/fi";
 import {
   Box,
   Button,
@@ -27,6 +28,12 @@ import {
   Radio,
   RadioGroup,
   Stack,
+  VStack,
+  Drawer,
+  DrawerBody,
+  DrawerOverlay,
+  DrawerContent,
+  useDisclosure,
 } from "@chakra-ui/react";
 import { Download, Upload, XLg } from "react-bootstrap-icons";
 
@@ -81,8 +88,20 @@ export const PaintDemo = React.memo(function Paint() {
   const [drawAction, setDrawAction] = useState(DrawAction.Scribble);
   const [isBgColorMode, setIsBgColorMode] = useState(false);
   const [fileFormat, setFileFormat] = useState("image/png");
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [isButtonGroupVisible, setIsButtonGroupVisible] = useState(false);
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const [activeOption, setActiveOption] = useState(null);
+  const initialFocusRef = React.useRef()
+
+  const toggleButtonGroupVisibility = () => {
+    setIsButtonGroupVisible((prevVisible) => !prevVisible);
+  };
 
 
+  const undoStack = useRef([]);
+  const redoStack = useRef([]);
 
 
 //able to select/deselect
@@ -101,7 +120,7 @@ export const PaintDemo = React.memo(function Paint() {
   const onStageMouseDown = useCallback(
     (e) => {
       checkDeselect(e);
-
+  
       if (drawAction === DrawAction.Select) return;
       isPaintRef.current = true;
       const stage = stageRef?.current;
@@ -110,7 +129,7 @@ export const PaintDemo = React.memo(function Paint() {
       const y = pos?.y || 0;
       const id = uuidv4();
       currentShapeRef.current = id;
-
+  
       switch (drawAction) {
         case DrawAction.Scribble: {
           setScribbles((prevScribbles) => [
@@ -120,6 +139,10 @@ export const PaintDemo = React.memo(function Paint() {
               points: [x, y],
               color,
             },
+          ]);
+          setHistory((prevHistory) => [
+            ...prevHistory,
+            { type: 'scribble', id }
           ]);
           break;
         }
@@ -133,6 +156,10 @@ export const PaintDemo = React.memo(function Paint() {
               y,
               color,
             },
+          ]);
+          setHistory((prevHistory) => [
+            ...prevHistory,
+            { type: 'circle', id }
           ]);
           break;
         }
@@ -148,6 +175,10 @@ export const PaintDemo = React.memo(function Paint() {
               color,
             },
           ]);
+          setHistory((prevHistory) => [
+            ...prevHistory,
+            { type: 'rectangle', id }
+          ]);
           break;
         }
         case DrawAction.Arrow: {
@@ -159,12 +190,18 @@ export const PaintDemo = React.memo(function Paint() {
               color,
             },
           ]);
+          setHistory((prevHistory) => [
+            ...prevHistory,
+            { type: 'arrow', id }
+          ]);
           break;
         }
       }
     },
     [checkDeselect, drawAction, color]
   );
+  
+  
   //positioning the shapes by pointer
   const onStageMouseMove = useCallback(() => {
     if (drawAction === DrawAction.Select || !isPaintRef.current) return;
@@ -289,6 +326,96 @@ export const PaintDemo = React.memo(function Paint() {
   }, [fileFormat]);
 
 
+ // Save canvas state in undo stack
+ const saveStateToUndo = () => {
+  undoStack.current.push({
+    scribbles: [...scribbles],
+    rectangles: [...rectangles],
+    circles: [...circles],
+    arrows: [...arrows],
+  });
+  redoStack.current = []; // Clear redo stack on new action
+};
+
+// Undo functionality
+const undo = () => {
+  setHistory((prevHistory) => {
+    const newHistory = [...prevHistory];
+    const lastItem = newHistory.pop(); // Get the last drawn shape
+
+    if (!lastItem) return prevHistory; // If no shapes, return the same history
+
+    // Save current state to redo stack before undoing
+    redoStack.current.push({
+      scribbles: [...scribbles],
+      rectangles: [...rectangles],
+      circles: [...circles],
+      arrows: [...arrows],
+    });
+
+    // Remove the shape from the corresponding state
+    switch (lastItem.type) {
+      case 'scribble':
+        setScribbles((prevScribbles) =>
+          prevScribbles.filter((scribble) => scribble.id !== lastItem.id)
+        );
+        break;
+      case 'circle':
+        setCircles((prevCircles) =>
+          prevCircles.filter((circle) => circle.id !== lastItem.id)
+        );
+        break;
+      case 'rectangle':
+        setRectangles((prevRectangles) =>
+          prevRectangles.filter((rect) => rect.id !== lastItem.id)
+        );
+        break;
+      case 'arrow':
+        setArrows((prevArrows) =>
+          prevArrows.filter((arrow) => arrow.id !== lastItem.id)
+        );
+        break;
+      default:
+        break;
+    }
+
+    return newHistory; // Return the updated history
+  });
+};
+
+
+// Redo functionality
+const redo = () => {
+  // Check if redo stack is empty
+  if (redoStack.current.length === 0) return;
+
+  // Pop the last state from the redo stack
+  const nextState = redoStack.current.pop();
+
+  // Save the current state before performing the redo
+  undoStack.current.push({
+    scribbles: [...scribbles],
+    rectangles: [...rectangles],
+    circles: [...circles],
+    arrows: [...arrows],
+  });
+
+  // Restore the shapes from the next state
+  setScribbles(nextState.scribbles);
+  setRectangles(nextState.rectangles);
+  setCircles(nextState.circles);
+  setArrows(nextState.arrows);
+
+  // Rebuild the history after redo
+  setHistory((prevHistory) => [
+    ...prevHistory,
+    ...nextState.scribbles.map((scribble) => ({ type: 'scribble', id: scribble.id })),
+    ...nextState.rectangles.map((rectangle) => ({ type: 'rectangle', id: rectangle.id })),
+    ...nextState.circles.map((circle) => ({ type: 'circle', id: circle.id })),
+    ...nextState.arrows.map((arrow) => ({ type: 'arrow', id: arrow.id })),
+  ]);
+};
+
 
   //clear the whole canvas
   const onClear = useCallback(() => {
@@ -383,7 +510,7 @@ export const PaintDemo = React.memo(function Paint() {
             />
           </PopoverContent>
         </Popover>
-        <IconButton aria-label="Upload image" onClick={onImportImageClick}>
+        {/* <IconButton aria-label="Upload image" onClick={onImportImageClick}>
           <Upload  size={14} />
         </IconButton>
         <input
@@ -391,80 +518,123 @@ export const PaintDemo = React.memo(function Paint() {
           type="file"
           style={{ display: "none" }}
           onChange={onImportImageSelect}
-        />
+        /> */}
+         <Button onClick={undo} colorScheme="yellow" >
+            Undo
+          </Button>
+          <Button onClick={redo} colorScheme="blue" >
+            Redo
+          </Button>
       </ButtonGroup>
-      <ButtonGroup>
-      <Button onClick={saveCanvasState} colorScheme="blue">
-            Save Canvas
-          </Button>
-          <input
-            ref={fileRef}
-            type="file"
-            style={{ display: "none" }}
-            onChange={loadCanvasState}
-          />
-          <Button onClick={onImportImageClick} colorScheme="green">
-            Load Canvas
-          </Button>
-          <Popover>
-  <PopoverTrigger>
-    <IconButton
-      aria-label="Export"
-      icon={<Download />}
-      colorScheme="blue"
-    />
-  </PopoverTrigger>
-  <PopoverContent>
-    <PopoverArrow />
-    <PopoverCloseButton />
-    <PopoverBody>
-      <RadioGroup onChange={setFileFormat} value={fileFormat}>
-        <Stack>
-          <Radio value="image/png">PNG</Radio>
-          <Radio value="image/jpeg">JPEG</Radio>
-          <Radio value="image/jpg">JPG</Radio>
-        </Stack>
-      </RadioGroup>
-      <Button
-        mt={2}
-        onClick={onExportClick}
-        colorScheme="blue"
-        width="100%"
-      >
-        Download
-      </Button>
-    </PopoverBody>
-  </PopoverContent>
-</Popover>
-        <IconButton onClick={onClear} aria-label="Clear canvas">
-          <XLg size={14} />
-        </IconButton>
-        <Button onClick={toggleBackgroundColorMode} className="small-text">
-            {isBgColorMode ? "Reset Background" : "Change Background"}
-          </Button>
+      <IconButton
+        icon={<FiMenu />}
+        aria-label="Open Menu"
+        onClick={onOpen}
+        variant="outline"
+        position=""
+        top="10px"
+        left="10px"
+        zIndex="1000"
+      />
+       <Drawer isOpen={isOpen} placement="right" onClose={onClose}>
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerBody p={0} bg="gray.700" color="">
+            {/* Sidebar Vertical Options */}
+            <VStack align="stretch" spacing={4} mt={10} p={4}>
+              <Button
+                colorScheme="blue"
+                onClick={() => {
+                  setActiveOption("Save");
+                  saveCanvasState();
+                  onClose();
+                }}
+              >
+                Save
+              </Button>
 
-          {/* Show background color icon and color picker only if background color mode is on */}
-          {isBgColorMode && (
-            <Popover>
+              <input
+              ref={fileRef}
+              type="file"
+              style={{ display: "none" }}
+              onChange={loadCanvasState}
+            />
+            <Button onClick={onImportImageClick} colorScheme="green" mb={2}>
+              Load Canvas
+            </Button>
+              <Button onClick={toggleBackgroundColorMode} >
+              {isBgColorMode ? "Reset Background" : "Change Background"}
+            </Button>
+
+              <Popover>
               <PopoverTrigger>
                 <IconButton
+                  aria-label="Export"
+                  icon={<Download />}
+                  colorScheme="blue"
+                  mb={2}
+                />
+              </PopoverTrigger>
+              <PopoverContent>
+                <PopoverArrow />
+                <PopoverCloseButton />
+                <PopoverBody>
+                  <RadioGroup onChange={setFileFormat} value={fileFormat}>
+                    <Stack>
+                      <Radio value="image/png" color="black">PNG</Radio>
+                      <Radio value="image/jpeg">JPEG</Radio>
+                      <Radio value="image/jpg">JPG</Radio>
+                    </Stack>
+                  </RadioGroup>
+                  <Button
+                    mt={2}
+                    onClick={onExportClick}
+                    colorScheme="blue"
+                    width="100%"
+                  >
+                    Download
+                  </Button>
+                </PopoverBody>
+              </PopoverContent>
+            </Popover>
+
+              <Button
+                colorScheme="red"
+                onClick={() => {
+                  setActiveOption("Clear");
+                  onClear();
+                  onClose();
+                }}
+              >
+                Clear
+              </Button>
+              {isBgColorMode && (
+            <Popover >
+              <PopoverTrigger bg='blue.300'>
+                <IconButton
+                bg='blue.500'
                   aria-label="Background color picker"
                   icon={
                     <Box bg={backgroundColor} h={"32px"} w={"32px"} />
                   }
                 />
               </PopoverTrigger>
-              <PopoverContent width="200px">
+              <PopoverContent width="200px"  >
                 <PopoverArrow />
                 <PopoverCloseButton />
-                <SketchPicker
+                <SketchPicker 
                   color={backgroundColor}
                   onChangeComplete={onBackgroundColorChange} // Update color
                 />
               </PopoverContent>
             </Popover>
           )}
-      </ButtonGroup>
+            </VStack>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
+      
+
     </Flex>
     <Box
       border="1px solid black"
